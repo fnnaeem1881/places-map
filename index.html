@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Search Places and Show Route</title>
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.css" />
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.js"></script>
+    <style>
+        body, html {
+            height: 100%;
+            margin: 0;
+        }
+
+        #map {
+            width: 100%;
+            height: 100%;
+        }
+
+        .search-container {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 1000;
+            background-color: rgba(255, 255, 255, 0.9);
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0px 0px 15px rgba(0, 0, 0, 0.1);
+            width: 300px;
+        }
+
+        .search-container input {
+            width: 100%;
+            padding: 12px;
+            border-radius: 8px;
+            border: 1px solid #ccc;
+            margin-bottom: 15px;
+            font-size: 14px;
+        }
+
+        .search-container button {
+            width: 100%;
+            padding: 12px;
+            background-color: #007bff;
+            border-radius: 8px;
+            border: none;
+            color: white;
+            font-size: 14px;
+            cursor: pointer;
+        }
+
+        .search-container button:hover {
+            background-color: #0056b3;
+        }
+
+        .autocomplete-suggestions {
+            position: absolute;
+            background-color: white;
+            border: 1px solid #ccc;
+            max-height: 200px;
+            overflow-y: auto;
+            width: 100%;
+            z-index: 10;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        }
+
+        .autocomplete-suggestion {
+            padding: 10px;
+            cursor: pointer;
+        }
+
+        .autocomplete-suggestion:hover {
+            background-color: #f0f0f0;
+        }
+
+        .loading {
+            display: none;
+            padding: 10px;
+            font-size: 14px;
+            color: #007bff;
+        }
+    </style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<!-- Search Container -->
+<div class="search-container">
+    <h5 class="mb-3">Start Location</h5>
+    <input type="text" id="start-location" placeholder="Enter starting point" onkeyup="autoSuggest('start')" />
+    
+    <h5 class="mb-3">End Location</h5>
+    <input type="text" id="end-location" placeholder="Enter destination" onkeyup="autoSuggest('end')" />
+    
+    <div id="suggestions" class="autocomplete-suggestions"></div>
+    
+    <div class="loading" id="loading-message">Loading...</div>
+    
+    <button onclick="showRoute()">Show Route</button>
+</div>
+
+<script>
+    // Initialize the map
+    const map = L.map('map').setView([23.8103, 90.4125], 13);  // Default to Dhaka, Bangladesh
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }).addTo(map);
+
+    let startLatLon = null;
+    let endLatLon = null;
+    let routeControl = null;
+
+    // Function to search for places and show suggestions
+    function autoSuggest(type) {
+        const query = type === 'start' ? document.getElementById('start-location').value : document.getElementById('end-location').value;
+        const suggestionsBox = document.getElementById('suggestions');
+        const loadingMessage = document.getElementById('loading-message');
+        suggestionsBox.innerHTML = '';
+        loadingMessage.style.display = 'none';
+
+        if (query.length < 3) {
+            suggestionsBox.style.display = 'none'; // Hide suggestions if less than 3 characters
+            return;
+        }
+
+        loadingMessage.style.display = 'block'; // Show loading message
+        $.get(`http://localhost:3000/api/places/search?query=${query}`, function(data) {
+            suggestionsBox.style.display = 'block'; // Show suggestions
+            loadingMessage.style.display = 'none'; // Hide loading message
+            if (data && data.results) {
+                data.results.forEach(suggestion => {
+                    const suggestionElement = document.createElement('div');
+                    suggestionElement.classList.add('autocomplete-suggestion');
+                    suggestionElement.textContent = suggestion.address;  // You can use place name or address
+                    suggestionElement.onclick = function() {
+                        if (type === 'start') {
+                            document.getElementById('start-location').value = suggestion.address;
+                            startLatLon = [parseFloat(suggestion.lat), parseFloat(suggestion.long)];
+                        } else {
+                            document.getElementById('end-location').value = suggestion.address;
+                            endLatLon = [parseFloat(suggestion.lat), parseFloat(suggestion.long)];
+                        }
+                        suggestionsBox.innerHTML = ''; // Clear suggestions
+                        suggestionsBox.style.display = 'none'; // Hide suggestions
+                    };
+                    suggestionsBox.appendChild(suggestionElement);
+                });
+            } else {
+                suggestionsBox.style.display = 'none'; // Hide suggestions if no results
+            }
+        }).fail(function(error) {
+            console.error('Error fetching suggestions:', error);
+            loadingMessage.style.display = 'none'; // Hide loading message on error
+        });
+    }
+
+    // Function to show the route between start and end locations
+    function showRoute() {
+        if (!startLatLon || !endLatLon) {
+            alert('Please select both start and end locations.');
+            return;
+        }
+
+        // Clear previous route
+        if (routeControl) {
+            map.removeControl(routeControl);
+        }
+
+        // Create the route between start and end locations
+        routeControl = L.Routing.control({
+            waypoints: [
+                L.latLng(startLatLon[0], startLatLon[1]),
+                L.latLng(endLatLon[0], endLatLon[1])
+            ],
+            routeWhileDragging: true,
+            createMarker: function() { return null; } // Disable markers
+        }).addTo(map);
+    }
+
+</script>
+
+</body>
+</html>

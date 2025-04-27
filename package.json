@@ -1,0 +1,18 @@
+{
+    "name": "place-search",
+    "version": "1.0.0",
+    "description": "API for searching places with Elasticsearch and PostgreSQL",
+    "main": "app.js",
+    "scripts": {
+        "start": "nodemon --legacy-watch app.js"
+    },
+    "dependencies": {
+        "@elastic/elasticsearch": "^8.18.2",
+        "cors": "^2.8.5",
+        "dotenv": "^16.5.0",
+        "express": "^4.17.1",
+        "pg": "^8.15.6"
+    },
+    "author": "",
+    "license": "ISC"
+}
