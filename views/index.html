@@ -132,7 +132,7 @@
         }
 
         loadingMessage.style.display = 'block'; // Show loading message
-        $.get(`http://localhost:3000/api/places/search?query=${query}`, function(data) {
+        $.get(`/api/places/search?query=${query}`, function(data) {
             suggestionsBox.style.display = 'block'; // Show suggestions
             loadingMessage.style.display = 'none'; // Hide loading message
             if (data && data.results) {
