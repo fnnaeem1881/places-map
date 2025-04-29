@@ -355,7 +355,7 @@ exports.fuzzySearch = async (query) => {
         console.log('Fuzzy search query:', query);
 
         const response = await client.search({
-            index: ['places_a', 'places'], // <-- search both indexes
+            index: [ 'places'], // <-- search both indexes
             body: {
                 query: {
                     bool: {
