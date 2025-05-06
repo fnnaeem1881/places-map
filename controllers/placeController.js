@@ -1,4 +1,4 @@
-const { fuzzySearch, indexAllPlacesInElasticsearch,getElasticsearchDataCountServices } = require('../services/placeService');
+const { fuzzySearch, indexAllPlacesInElasticsearch,getElasticsearchDataCountServices, fuzzySearchFromMySQL, fuzzySearchFromPostgres } = require('../services/placeService');
 
 // Controller for searching places
 exports.searchPlaces = async (req, res) => {
@@ -9,19 +9,29 @@ exports.searchPlaces = async (req, res) => {
   }
 
   try {
-    // Perform search in Elasticsearch
-    const elasticSearchResults = await fuzzySearch(query);
+    console.log('Fuzzy search query:', query);
+    let elasticSearchResults = await fuzzySearchFromPostgres(query);
 
-    if (elasticSearchResults.length === 0) {
-      return res.status(200).json({ message: 'No results found in Elasticsearch' });
-    }
+    // if (!Array.isArray(elasticSearchResults) || elasticSearchResults.length === 0) {
+    //   console.log('No results found or invalid response. Re-indexing...');
+    //   await indexAllPlacesInElasticsearch();
+
+    //   // Retry search after re-indexing
+    //   elasticSearchResults = await fuzzySearch(query);
+
+    //   if (!Array.isArray(elasticSearchResults) || elasticSearchResults.length === 0) {
+    //     return res.status(200).json({ message: 'No results found in Elasticsearch after re-indexing' });
+    //   }
+    // }
 
     return res.status(200).json({ results: elasticSearchResults });
+
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'An error occurred while searching for places' });
+    console.error('Error occurred while searching or indexing places:', error);
+    return res.status(500).json({ error: 'An error occurred while searching for places' });
   }
 };
+
 
 // Controller for indexing all places from PostgreSQL into Elasticsearch
 exports.indexAllPlaces = async (req, res) => {

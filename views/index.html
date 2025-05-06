@@ -95,10 +95,10 @@
 <!-- Search Container -->
 <div class="search-container">
     <h5 class="mb-3">Start Location</h5>
-    <input type="text" id="start-location" placeholder="Enter starting point" onkeyup="autoSuggest('start')" />
+    <input type="text" id="start-location" placeholder="Enter starting point" onkeyup="debounceAutoSuggest('start')" />
     
     <h5 class="mb-3">End Location</h5>
-    <input type="text" id="end-location" placeholder="Enter destination" onkeyup="autoSuggest('end')" />
+    <input type="text" id="end-location" placeholder="Enter destination" onkeyup="debounceAutoSuggest('end')" />
     
     <div id="suggestions" class="autocomplete-suggestions"></div>
     
@@ -108,84 +108,95 @@
 </div>
 
 <script>
-    // Initialize the map
-    const map = L.map('map').setView([23.8103, 90.4125], 13);  // Default to Dhaka, Bangladesh
+    const map = L.map('map').setView([23.8103, 90.4125], 13);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        attribution: '&copy; OpenStreetMap contributors'
     }).addTo(map);
 
     let startLatLon = null;
     let endLatLon = null;
     let routeControl = null;
 
-    // Function to search for places and show suggestions
+    let debounceTimer = null;
+
+    // Debounced search: waits 2s after typing
+    function debounceAutoSuggest(type) {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => {
+            autoSuggest(type);
+        }, 1000); // ⏳ 2 seconds
+    }
+
     function autoSuggest(type) {
-        const query = type === 'start' ? document.getElementById('start-location').value : document.getElementById('end-location').value;
+        const queryInput = type === 'start' ? 'start-location' : 'end-location';
+        const query = document.getElementById(queryInput).value;
         const suggestionsBox = document.getElementById('suggestions');
         const loadingMessage = document.getElementById('loading-message');
+
+        // Clear existing suggestions before sending request
         suggestionsBox.innerHTML = '';
         loadingMessage.style.display = 'none';
 
         if (query.length < 3) {
-            suggestionsBox.style.display = 'none'; // Hide suggestions if less than 3 characters
+            suggestionsBox.style.display = 'none';
             return;
         }
 
-        loadingMessage.style.display = 'block'; // Show loading message
-        $.get(`/api/places/search?query=${query}`, function(data) {
-            suggestionsBox.style.display = 'block'; // Show suggestions
-            loadingMessage.style.display = 'none'; // Hide loading message
-            if (data && data.results) {
+        loadingMessage.style.display = 'block';
+
+        $.get(`/api/places/search?query=${encodeURIComponent(query)}`, function(data) {
+            suggestionsBox.innerHTML = ''; // clear again before showing new results
+            loadingMessage.style.display = 'none';
+            suggestionsBox.style.display = 'block';
+
+            if (data && data.results && data.results.length) {
                 data.results.forEach(suggestion => {
                     const suggestionElement = document.createElement('div');
                     suggestionElement.classList.add('autocomplete-suggestion');
-                    suggestionElement.textContent = suggestion.address;  // You can use place name or address
-                    suggestionElement.onclick = function() {
+                    suggestionElement.textContent = suggestion.address;
+
+                    suggestionElement.onclick = function () {
+                        document.getElementById(queryInput).value = suggestion.address;
+
                         if (type === 'start') {
-                            document.getElementById('start-location').value = suggestion.address;
                             startLatLon = [parseFloat(suggestion.lat), parseFloat(suggestion.long)];
                         } else {
-                            document.getElementById('end-location').value = suggestion.address;
                             endLatLon = [parseFloat(suggestion.lat), parseFloat(suggestion.long)];
                         }
-                        suggestionsBox.innerHTML = ''; // Clear suggestions
-                        suggestionsBox.style.display = 'none'; // Hide suggestions
+
+                        suggestionsBox.innerHTML = '';
+                        suggestionsBox.style.display = 'none';
                     };
+
                     suggestionsBox.appendChild(suggestionElement);
                 });
             } else {
-                suggestionsBox.style.display = 'none'; // Hide suggestions if no results
+                suggestionsBox.style.display = 'none';
             }
-        }).fail(function(error) {
-            console.error('Error fetching suggestions:', error);
-            loadingMessage.style.display = 'none'; // Hide loading message on error
+        }).fail(function (err) {
+            console.error('Suggestion error:', err);
+            loadingMessage.style.display = 'none';
+            suggestionsBox.style.display = 'none';
         });
     }
 
-    // Function to show the route between start and end locations
     function showRoute() {
         if (!startLatLon || !endLatLon) {
             alert('Please select both start and end locations.');
             return;
         }
 
-        // Clear previous route
         if (routeControl) {
             map.removeControl(routeControl);
         }
 
-        // Create the route between start and end locations
         routeControl = L.Routing.control({
             waypoints: [
                 L.latLng(startLatLon[0], startLatLon[1]),
                 L.latLng(endLatLon[0], endLatLon[1])
             ],
             routeWhileDragging: true,
-            createMarker: function() { return null; } // Disable markers
+            createMarker: () => null
         }).addTo(map);
     }
-
 </script>
-
-</body>
-</html>
