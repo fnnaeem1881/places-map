@@ -241,42 +241,75 @@ async function checkAndEnablePgTrgm() {
 
 // Run the check and enable pg_trgm extension
 checkAndEnablePgTrgm();
+
+
+// exports.fuzzySearchFromPostgres = async (query) => {
+//     try {
+//         // SQL query for fuzzy search without limiting DB results
+//         const sql = `
+//             SELECT * 
+//             FROM places
+//             WHERE address % $1 OR address_bn % $1
+//             ORDER BY similarity(address, $1) DESC, LENGTH(address) LIMIT 10;
+//         `;
+//         const { rows } = await pool.query(sql, [query]);
+
+//         const uniqueResults = [];
+
+//         rows.forEach(place => {
+//             const existingPlace = uniqueResults.find(p => 
+//                 (p.address === place.address || p.address_bn === place.address_bn) ||
+//                 haversine(p.lat, p.long, place.lat, place.long) <= 10
+//             );
+
+//             if (!existingPlace) {
+//                 uniqueResults.push(place);
+//             }
+//         });
+//         console.log('Unique results:', uniqueResults.length);
+//         // Sort by address length (shortest first)
+//         // uniqueResults.sort((a, b) => a.address.length - b.address.length);
+//         return uniqueResults; 
+
+//         // Return only the top 10 filtered results
+//         return uniqueResults.slice(0, 10);
+
+//     } catch (error) {
+//         console.error('Postgres fuzzy search error:', error);
+//         return [];
+//     }
+// };
 exports.fuzzySearchFromPostgres = async (query) => {
     try {
-        // SQL query for fuzzy search without limiting DB results
         const sql = `
             SELECT * 
             FROM places
             WHERE address % $1 OR address_bn % $1
-            ORDER BY similarity(address, $1) DESC, LENGTH(address) LIMIT 10;
+            ORDER BY similarity(address, $1) DESC
+            LIMIT 10;
         `;
         const { rows } = await pool.query(sql, [query]);
 
+        const seen = new Set(); // Use a Set to track seen addresses
         const uniqueResults = [];
 
         rows.forEach(place => {
-            const existingPlace = uniqueResults.find(p => 
-                (p.address === place.address || p.address_bn === place.address_bn) ||
-                haversine(p.lat, p.long, place.lat, place.long) <= 10
-            );
-
-            if (!existingPlace) {
+            const addressKey = place.address || place.address_bn;
+            if (!seen.has(addressKey)) {
+                seen.add(addressKey);
                 uniqueResults.push(place);
             }
         });
-        console.log('Unique results:', uniqueResults.length);
-        // Sort by address length (shortest first)
-        // uniqueResults.sort((a, b) => a.address.length - b.address.length);
-        return uniqueResults; 
 
-        // Return only the top 10 filtered results
-        return uniqueResults.slice(0, 10);
+        console.log('Unique results:', uniqueResults.length);
+        return uniqueResults;
 
     } catch (error) {
         console.error('Postgres fuzzy search error:', error);
         return [];
     }
 };
+
 
 
 exports.fuzzySearchFromMySQL = async (query) => {
