@@ -280,37 +280,59 @@ checkAndEnablePgTrgm();
 //     }
 // };
 exports.fuzzySearchFromPostgres = async (query) => {
+    console.time('FuzzySearchLatency');
+    console.log('Fuzzy search query:', query);
+
     try {
         const sql = `
-            SELECT * 
+            SELECT id, address, address_bn, lat, long
             FROM places
-            WHERE address % $1 OR address_bn % $1
-            ORDER BY similarity(address, $1) DESC
-            LIMIT 10;
+            WHERE (
+                address % $1 OR
+                address_bn % $1
+            )
+            AND (
+                similarity(address, $1) > 0.3 OR
+                similarity(address_bn, $1) > 0.3
+            )
+            ORDER BY
+                GREATEST(similarity(address, $1), similarity(address_bn, $1)) DESC
+            LIMIT 15;
         `;
+
+        const startTime = Date.now();
         const { rows } = await pool.query(sql, [query]);
+        const dbTime = Date.now() - startTime;
+        console.log(`Database query time: ${dbTime}ms`);
 
-        const seen = new Set(); // Use a Set to track seen addresses
         const uniqueResults = [];
+        const seen = [];
 
-        rows.forEach(place => {
-            const addressKey = place.address || place.address_bn;
-            if (!seen.has(addressKey)) {
-                seen.add(addressKey);
+        for (const place of rows) {
+            const isDuplicate = seen.some(existing => {
+                const distance = haversine(existing.lat, existing.long, place.lat, place.long);
+                return distance <= 10 && (
+                    existing.address === place.address ||
+                    existing.address_bn === place.address_bn
+                );
+            });
+
+            if (!isDuplicate) {
                 uniqueResults.push(place);
+                seen.push(place);
             }
-        });
+        }
 
         console.log('Unique results:', uniqueResults.length);
+        console.timeEnd('FuzzySearchLatency');
         return uniqueResults;
 
     } catch (error) {
         console.error('Postgres fuzzy search error:', error);
+        console.timeEnd('FuzzySearchLatency');
         return [];
     }
 };
-
-
 
 exports.fuzzySearchFromMySQL = async (query) => {
     try {
