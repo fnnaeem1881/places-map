@@ -285,7 +285,7 @@ exports.fuzzySearchFromPostgres = async (query) => {
 
     try {
         const sql = `
-            SELECT id, address, address_bn, lat, long
+            SELECT *
             FROM places
             WHERE (
                 address % $1 OR
